@@ -1,0 +1,367 @@
+:root {
+  --bg: #f5f6f8;
+  --fg: #1c1f26;
+  --fg-dim: #697180;
+  --chip: #ffffff;
+  --chip-hover: #eceef2;
+  --outline: #3b82f6;
+  --danger: #dc2626;
+  --surface: #ffffff;
+  --surface-border: #d8dce3;
+  --shadow: 0 1px 3px rgb(0 0 0 / 0.1), 0 4px 16px rgb(0 0 0 / 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17181c;
+    --fg: #e7e9ee;
+    --fg-dim: #8b93a3;
+    --chip: #25272e;
+    --chip-hover: #30333c;
+    --outline: #60a5fa;
+    --danger: #f87171;
+    --surface: #212329;
+    --surface-border: #3a3d46;
+    --shadow: 0 1px 3px rgb(0 0 0 / 0.4), 0 4px 16px rgb(0 0 0 / 0.3);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: clamp(24px, 9vh, 96px) 32px 48px;
+}
+
+/* ---- breadcrumb ---- */
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  min-height: 32px;
+  margin-bottom: 20px;
+}
+
+.breadcrumb-root {
+  visibility: hidden;
+}
+
+.crumb {
+  border: none;
+  background: none;
+  color: var(--fg-dim);
+  font: inherit;
+  padding: 4px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.crumb:hover:not(:disabled) {
+  background: var(--chip-hover);
+  color: var(--fg);
+}
+
+.crumb:disabled {
+  color: var(--fg);
+  font-weight: 600;
+  cursor: default;
+}
+
+.crumb-sep {
+  color: var(--fg-dim);
+}
+
+/* ---- grid & tiles ---- */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 18px 6px;
+  justify-items: center;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 116px;
+  padding: 6px 4px;
+  border: none;
+  background: none;
+  border-radius: 14px;
+  color: inherit;
+  font: inherit;
+  text-decoration: none;
+  text-align: center;
+  cursor: pointer;
+  position: relative;
+}
+
+.tile:hover .tile-chip {
+  background: var(--chip-hover);
+  transform: translateY(-1px);
+}
+
+.tile:focus-visible {
+  outline: 2px solid var(--outline);
+  outline-offset: 2px;
+}
+
+.tile-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 18px;
+  background: var(--chip);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  transition: background 120ms ease, transform 120ms ease;
+}
+
+.tile-icon {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+
+.tile-letter {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.tile-folder-glyph {
+  color: var(--fg-dim);
+  display: flex;
+}
+
+.tile-plus-glyph {
+  color: var(--fg-dim);
+  display: flex;
+}
+
+.tile-add .tile-chip {
+  background: transparent;
+  box-shadow: none;
+  border: 2px dashed var(--surface-border);
+}
+
+.tile-add .tile-label {
+  color: var(--fg-dim);
+}
+
+.tile-label {
+  font-size: 12.5px;
+  line-height: 1.25;
+  max-width: 100%;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+
+.empty {
+  text-align: center;
+  color: var(--fg-dim);
+  margin-top: 32px;
+}
+
+/* ---- drag and drop ---- */
+
+.tile.dragging {
+  opacity: 0.35;
+}
+
+.tile.drop-before::before,
+.tile.drop-after::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--outline);
+}
+
+.tile.drop-before::before {
+  left: -5px;
+}
+
+.tile.drop-after::after {
+  right: -5px;
+}
+
+.tile.drop-into .tile-chip {
+  outline: 2px solid var(--outline);
+  outline-offset: 2px;
+}
+
+/* ---- dialogs ---- */
+
+dialog {
+  border: 1px solid var(--surface-border);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--fg);
+  box-shadow: var(--shadow);
+  padding: 20px 22px;
+  min-width: 320px;
+}
+
+dialog::backdrop {
+  background: rgb(0 0 0 / 0.4);
+}
+
+dialog h2 {
+  margin: 0 0 14px;
+  font-size: 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.field span {
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
+.field input {
+  font: inherit;
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.field input:focus-visible {
+  outline: 2px solid var(--outline);
+  outline-offset: -1px;
+}
+
+.field-error {
+  color: var(--danger);
+  font-size: 12px;
+  margin: -6px 0 10px;
+}
+
+.dialog-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 16px 0 0;
+  padding: 0;
+}
+
+.dialog-buttons button {
+  font: inherit;
+  padding: 7px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--surface-border);
+  background: var(--surface);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.dialog-buttons button:hover {
+  background: var(--chip-hover);
+}
+
+.dialog-buttons button.primary {
+  background: var(--outline);
+  border-color: var(--outline);
+  color: #fff;
+}
+
+.dialog-buttons button.danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+/* ---- context menu ---- */
+
+.context-menu {
+  position: fixed;
+  z-index: 100;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  min-width: 180px;
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+
+.context-menu button {
+  display: block;
+  width: 100%;
+  text-align: start;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+
+.context-menu button:hover,
+.context-menu button:focus-visible {
+  background: var(--chip-hover);
+  outline: none;
+}
+
+.context-menu button.danger {
+  color: var(--danger);
+}
+
+/* ---- toast ---- */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--surface-border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 10px 18px;
+  max-width: 80vw;
+  z-index: 110;
+}

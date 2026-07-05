@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>New Tab</title>
+<link rel="stylesheet" href="css/newtab.css">
+</head>
+<body>
+
+<div class="page">
+  <nav id="breadcrumb" class="breadcrumb" aria-label="Folder path"></nav>
+  <main id="grid" class="grid"></main>
+  <p id="empty" class="empty" hidden>No favourites here yet — right-click or use the + tile to add one.</p>
+</div>
+
+<dialog id="edit-dialog">
+  <form id="edit-form" method="dialog" novalidate>
+    <h2 id="dialog-title">Add favourite</h2>
+    <label class="field">
+      <span>Name</span>
+      <input name="title" type="text" autocomplete="off">
+    </label>
+    <label class="field" id="url-row">
+      <span>URL</span>
+      <input name="url" type="text" autocomplete="off" spellcheck="false" placeholder="example.com">
+    </label>
+    <p id="url-error" class="field-error" hidden>Enter a valid URL.</p>
+    <menu class="dialog-buttons">
+      <button value="cancel" formnovalidate>Cancel</button>
+      <button value="ok" class="primary" id="dialog-ok">Save</button>
+    </menu>
+  </form>
+</dialog>
+
+<dialog id="confirm-dialog">
+  <form method="dialog">
+    <p id="confirm-message"></p>
+    <menu class="dialog-buttons">
+      <button value="cancel" autofocus>Cancel</button>
+      <button value="ok" class="danger">Delete</button>
+    </menu>
+  </form>
+</dialog>
+
+<ul id="context-menu" class="context-menu" hidden></ul>
+<div id="toast" class="toast" hidden></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
