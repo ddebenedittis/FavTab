@@ -149,6 +149,89 @@ function assert(cond, msg) {
   console.log(`INFO: move(A -> index 2) over [A,B,C] gives [${order}]`);
   assert(order === 'BAC', 'move uses pre-removal index semantics (dnd.js assumption)');
 
+  // 8b. settings: dock, icon size, and sort mode
+  const workId = await page.evaluate(async (getBarSrc) => {
+    const bar = await eval(getBarSrc);
+    const kids = await chrome.bookmarks.getChildren(bar.id);
+    return kids.find((k) => k.title === 'Work').id;
+  }, getBar);
+
+  await page.locator('#open-settings').click();
+  assert(await page.locator('#settings-dialog').isVisible(), 'gear opens settings dialog');
+  // Dock tab is shown first; its panel is visible, the Appearance panel hidden.
+  assert(
+    (await page.locator('.settings-panel[data-panel="dock"]').isVisible()) &&
+      !(await page.locator('.settings-panel[data-panel="appearance"]').isVisible()),
+    'settings open on the Dock tab'
+  );
+  await page.locator('#settings-form input[name="dockEnabled"]').check();
+  await page.locator('#settings-form select[name="dockFolderId"]').selectOption(workId);
+  await page.locator('#settings-form select[name="dockPosition"]').selectOption('left');
+  // Switch to the Appearance tab for the size / order controls.
+  await page.locator('.settings-tab[data-tab="appearance"]').click();
+  assert(
+    await page.locator('.settings-panel[data-panel="appearance"]').isVisible(),
+    'clicking a tab reveals its panel'
+  );
+  await page.$eval('#settings-form input[name="iconSize"]', (el) => {
+    el.value = '64';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page.locator('#settings-form select[name="sortMode"]').selectOption('alphabetical');
+  await page.locator('#settings-form button[value="ok"]').click();
+  await page.waitForTimeout(300);
+
+  assert(await page.locator('#dock').isVisible(), 'dock visible once enabled');
+  assert(
+    (await page.locator('#dock .tile[data-id]').count()) === 1,
+    'dock shows the chosen folder contents (Inside), no add tile'
+  );
+  assert(
+    (await page.evaluate(() => document.body.dataset.dockPosition)) === 'left',
+    'dock position written to body[data-dock-position]'
+  );
+  assert(
+    await page.locator('#dock .tile[data-id] .tile-label').first().isVisible(),
+    'dock tiles show labels and match grid tile width'
+  );
+  assert(
+    (await page.evaluate(() => {
+      const dockTile = document.querySelector('#dock .tile[data-id]');
+      return getComputedStyle(dockTile).width;
+    })) ===
+      (await page.evaluate(() =>
+        getComputedStyle(document.documentElement).getPropertyValue('--tile-width').trim()
+      )),
+    'dock tile width equals --tile-width'
+  );
+  assert(
+    (await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--icon-size').trim()
+    )) === '64px',
+    'icon size setting applies --icon-size'
+  );
+
+  // Alphabetical order + drag disabled, checked inside the Probe folder ([B,A,C]).
+  await page.locator('.tile.tile-is-folder').filter({ hasText: 'Probe' }).click();
+  await page.waitForTimeout(300);
+  assert(
+    (await page.locator('#grid .tile[data-id] .tile-label').allTextContents()).join('') === 'ABC',
+    'alphabetical mode sorts tiles A→Z (display only)'
+  );
+  assert(
+    (await page.locator('#grid .tile[data-id]').first().getAttribute('draggable')) === 'false',
+    'tiles are not draggable outside manual mode'
+  );
+
+  // 8c. settings persist across a reload (chrome.storage.sync)
+  await page.reload();
+  await page.waitForTimeout(800);
+  assert(await page.locator('#dock').isVisible(), 'dock + settings persist after reload');
+  assert(
+    (await page.evaluate(() => document.body.dataset.dockPosition)) === 'left',
+    'dock position persists after reload'
+  );
+
   // 9. screenshots, light + dark (only if an /out volume is mounted)
   if (require('fs').existsSync('/out')) {
     await page.screenshot({ path: '/out/newtab-light.png' });

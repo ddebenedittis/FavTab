@@ -24,13 +24,29 @@ export function renderBreadcrumb(container, path, onNavigate) {
   container.classList.toggle('breadcrumb-root', path.length <= 1);
 }
 
-export function renderGrid(container, children, handlers) {
+// options: { sortMode, draggable, showAdd }
+export function renderGrid(container, children, handlers, options = {}) {
+  const { sortMode = 'manual', draggable = true, showAdd = true } = options;
   container.textContent = '';
-  children.forEach((node, index) => container.append(makeTile(node, index, handlers)));
-  container.append(makeAddTile(handlers.onAdd));
+  const ordered = sortMode === 'alphabetical' ? sortAlphabetically(children) : children;
+  ordered.forEach((node, index) => container.append(makeTile(node, index, handlers, draggable)));
+  if (showAdd) container.append(makeAddTile(handlers.onAdd));
 }
 
-function makeTile(node, index, handlers) {
+// Folders first, then A→Z by title. Non-mutating: sorts a copy, so the real
+// bookmark order in Chrome is never touched.
+function sortAlphabetically(children) {
+  return [...children].sort((a, b) => {
+    const aFolder = a.url ? 1 : 0;
+    const bFolder = b.url ? 1 : 0;
+    if (aFolder !== bFolder) return aFolder - bFolder;
+    const at = a.title || a.url || '';
+    const bt = b.title || b.url || '';
+    return at.localeCompare(bt, undefined, { numeric: true, sensitivity: 'base' });
+  });
+}
+
+function makeTile(node, index, handlers, draggable = true) {
   const isFolder = !node.url;
   let tile;
 
@@ -63,7 +79,7 @@ function makeTile(node, index, handlers) {
     });
   }
 
-  tile.draggable = true;
+  tile.draggable = draggable;
   tile.dataset.id = node.id;
   tile.dataset.index = index;
   tile.title = node.title || node.url || '';

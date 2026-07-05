@@ -1,14 +1,19 @@
 // Entry point: navigation state and wiring. Mutations go through the
-// bookmarks adapter; re-rendering happens only via onAnyChange.
+// bookmarks adapter; re-rendering happens via onAnyChange (bookmark data) and
+// settings.onChange (user preferences).
 
 import * as bm from './bookmarks.js';
+import * as settings from './settings.js';
 import { renderBreadcrumb, renderGrid } from './grid.js';
 import { initDnd } from './dnd.js';
 import { openBookmarkDialog, confirmDialog, openContextMenu, showToast } from './dialogs.js';
+import { openSettingsDialog } from './settings-ui.js';
 
 const gridEl = document.getElementById('grid');
 const crumbEl = document.getElementById('breadcrumb');
 const emptyEl = document.getElementById('empty');
+const dockEl = document.getElementById('dock');
+const dockGridEl = document.getElementById('dock-grid');
 
 const state = {
   path: [], // [{id, title}], path[0] is the Bookmarks Bar
@@ -16,15 +21,30 @@ const state = {
   renderKey: null, // signature of the last render; skips redundant re-renders
 };
 
-const currentFolder = () => state.path[state.path.length - 1];
+// The dock shows a fixed chosen folder, navigated independently of the grid.
+const dockState = {
+  folderId: null,
+  children: [],
+  renderKey: null,
+};
 
-// A stable fingerprint of everything the current view draws. Chrome fires
-// bookmark events during background sync even when nothing actually changed;
-// re-rendering on those recreates every <img> and makes the icons flash. If the
-// fingerprint is unchanged we skip the render entirely.
-function renderKey(path, children) {
+const currentFolder = () => state.path[state.path.length - 1];
+const dragEnabled = () => settings.get().sortMode === 'manual';
+
+function gridOptions(showAdd) {
+  const { sortMode } = settings.get();
+  return { sortMode, draggable: sortMode === 'manual', showAdd };
+}
+
+// A stable fingerprint of everything a view draws. Chrome fires bookmark events
+// during background sync even when nothing actually changed; re-rendering on
+// those recreates every <img> and makes the icons flash. If the fingerprint is
+// unchanged we skip the render entirely. sortMode is part of it so switching
+// order forces a redraw.
+function renderKey(parts, children, sortMode) {
   return JSON.stringify([
-    path.map((p) => [p.id, p.title ?? '']),
+    sortMode,
+    parts,
     children.map((n) => [n.id, n.title ?? '', n.url ?? '']),
   ]);
 }
@@ -49,7 +69,11 @@ async function refresh() {
   }
   state.children = children;
 
-  const key = renderKey(state.path, children);
+  const key = renderKey(
+    state.path.map((p) => [p.id, p.title ?? '']),
+    children,
+    settings.get().sortMode
+  );
   if (key === state.renderKey) return; // nothing visible changed — don't reflash
   state.renderKey = key;
 
@@ -57,12 +81,52 @@ async function refresh() {
     state.path = state.path.slice(0, i + 1);
     refresh();
   });
-  renderGrid(gridEl, children, handlers);
+  renderGrid(gridEl, children, handlers, gridOptions(true));
   emptyEl.hidden = children.length !== 0;
+}
+
+// Render the dock from its chosen folder, or hide it (and drop the reserved
+// edge padding) when it's off, unchosen, or the folder no longer exists.
+async function refreshDock() {
+  const s = settings.get();
+  let children = null;
+  if (s.dockEnabled && s.dockFolderId) {
+    try {
+      await bm.getNode(s.dockFolderId);
+      children = await bm.getChildren(s.dockFolderId);
+    } catch {
+      children = null;
+    }
+  }
+
+  if (!children) {
+    dockEl.hidden = true;
+    delete document.body.dataset.dockPosition;
+    dockState.folderId = null;
+    dockState.children = [];
+    dockState.renderKey = null;
+    return;
+  }
+
+  dockState.folderId = s.dockFolderId;
+  dockState.children = children;
+  // Set outside the render-key guard so a position-only change still moves it.
+  document.body.dataset.dockPosition = s.dockPosition;
+  dockEl.hidden = false;
+
+  const key = renderKey([s.dockFolderId], children, s.sortMode);
+  if (key === dockState.renderKey) return;
+  dockState.renderKey = key;
+  renderGrid(dockGridEl, children, handlers, gridOptions(false));
+}
+
+function refreshAll() {
+  return Promise.all([refresh(), refreshDock()]);
 }
 
 const handlers = {
   onOpenFolder(node) {
+    // A folder click — from the grid or the dock — navigates the main grid.
     state.path.push({ id: node.id, title: node.title });
     refresh();
   },
@@ -106,8 +170,13 @@ document.addEventListener('contextmenu', (event) => {
   if (event.target.closest('dialog, input, textarea')) return;
   event.preventDefault();
 
+  // The menu operates on whichever view was right-clicked.
+  const inDock = !!event.target.closest('#dock');
+  const children = inDock ? dockState.children : state.children;
+  const addParentId = inDock ? dockState.folderId : currentFolder().id;
+
   const tile = event.target.closest('.tile[data-id]');
-  const node = tile && state.children.find((n) => n.id === tile.dataset.id);
+  const node = tile && children.find((n) => n.id === tile.dataset.id);
 
   if (node && node.url) {
     openContextMenu(event.clientX, event.clientY, [
@@ -121,32 +190,60 @@ document.addEventListener('contextmenu', (event) => {
       { label: 'Rename…', action: () => openBookmarkDialog({ mode: 'rename-folder', node }) },
       { label: 'Delete…', danger: true, action: () => deleteNode(node) },
     ]);
-  } else {
+  } else if (addParentId) {
     openContextMenu(event.clientX, event.clientY, [
-      { label: 'Add favourite…', action: () => openBookmarkDialog({ mode: 'add', parentId: currentFolder().id }) },
-      { label: 'New folder…', action: () => openBookmarkDialog({ mode: 'add-folder', parentId: currentFolder().id }) },
+      { label: 'Add favourite…', action: () => openBookmarkDialog({ mode: 'add', parentId: addParentId }) },
+      { label: 'New folder…', action: () => openBookmarkDialog({ mode: 'add-folder', parentId: addParentId }) },
     ]);
   }
 });
 
+async function moveNode(id, destination) {
+  try {
+    await bm.move(id, destination);
+  } catch (err) {
+    showToast(err?.message || String(err));
+  }
+}
+
 initDnd(gridEl, {
   getCurrentFolderId: () => currentFolder().id,
-  moveNode: async (id, destination) => {
-    try {
-      await bm.move(id, destination);
-    } catch (err) {
-      showToast(err?.message || String(err));
-    }
-  },
+  isEnabled: dragEnabled,
+  moveNode,
+});
+
+initDnd(dockGridEl, {
+  getCurrentFolderId: () => dockState.folderId,
+  isEnabled: dragEnabled,
+  moveNode,
+});
+
+function onSettingsChange(s, changed) {
+  const has = (k) => changed.includes(k);
+  if (has('iconSize') || has('perRow') || has('bgColor')) settings.applyCssVars(s);
+  if (has('sortMode')) {
+    refreshAll(); // re-order both views and toggle draggable
+  } else if (has('dockEnabled') || has('dockFolderId') || has('dockPosition')) {
+    refreshDock();
+  }
+}
+
+document.getElementById('open-settings').addEventListener('click', () => {
+  openSettingsDialog();
 });
 
 (async function init() {
   try {
+    await settings.load();
+    settings.applyCssVars();
     const bar = await bm.getBarFolder();
     state.path = [{ id: bar.id, title: bar.title || 'Bookmarks' }];
-    bm.onAnyChange(refresh);
-    await refresh();
+    bm.onAnyChange(refreshAll);
+    settings.onChange(onSettingsChange);
+    await refreshAll();
   } catch (err) {
     showToast(err?.message || String(err));
+  } finally {
+    document.documentElement.classList.remove('booting');
   }
 })();

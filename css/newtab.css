@@ -9,6 +9,15 @@
   --surface: #ffffff;
   --surface-border: #d8dce3;
   --shadow: 0 1px 3px rgb(0 0 0 / 0.1), 0 4px 16px rgb(0 0 0 / 0.06);
+
+  /* Sizing driven by settings (see js/settings.js applyCssVars). */
+  --icon-size: 48px;
+  --chip-size: 72px;
+  --tile-width: 116px;
+  /* Space to reserve for the dock: its tile height on top/bottom, its tile
+     width on left/right. */
+  --dock-thickness-h: calc(var(--chip-size) + 72px);
+  --dock-thickness-v: calc(var(--tile-width) + 28px);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -37,10 +46,31 @@ body {
 }
 
 body {
-  background: var(--bg);
+  background: var(--custom-bg, var(--bg));
   color: var(--fg);
   font: 14px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Hide everything until settings have loaded, to avoid a flash of the
+   default layout before the persisted icon size / columns / dock apply. */
+html.booting body {
+  visibility: hidden;
+}
+
+/* Reserve space so a fixed-position dock never covers the page content.
+   The attribute is only present on <body> while the dock is enabled. */
+body[data-dock-position='bottom'] {
+  padding-bottom: var(--dock-thickness-h);
+}
+body[data-dock-position='top'] {
+  padding-top: var(--dock-thickness-h);
+}
+body[data-dock-position='left'] {
+  padding-left: var(--dock-thickness-v);
+}
+body[data-dock-position='right'] {
+  padding-right: var(--dock-thickness-v);
 }
 
 .page {
@@ -93,7 +123,9 @@ body {
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  /* --grid-template is set when the user picks a fixed column count;
+     otherwise fall back to the responsive auto-fill layout. */
+  grid-template-columns: var(--grid-template, repeat(auto-fill, minmax(104px, 1fr)));
   gap: 18px 6px;
   justify-items: center;
 }
@@ -104,7 +136,7 @@ body {
   align-items: center;
   gap: 8px;
   width: 100%;
-  max-width: 116px;
+  max-width: var(--tile-width);
   padding: 6px 4px;
   border: none;
   background: none;
@@ -131,8 +163,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 72px;
-  height: 72px;
+  width: var(--chip-size);
+  height: var(--chip-size);
   border-radius: 18px;
   background: var(--chip);
   box-shadow: var(--shadow);
@@ -141,8 +173,8 @@ body {
 }
 
 .tile-icon {
-  width: 48px;
-  height: 48px;
+  width: var(--icon-size);
+  height: var(--icon-size);
   object-fit: contain;
 }
 
@@ -152,7 +184,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 30px;
+  font-size: calc(var(--chip-size) * 0.42);
   font-weight: 600;
   color: #fff;
 }
@@ -364,4 +396,180 @@ dialog h2 {
   padding: 10px 18px;
   max-width: 80vw;
   z-index: 110;
+}
+
+/* ---- dock ---- */
+
+/* A fixed strip pinned to one screen edge, showing the tiles of one chosen
+   folder. It reuses the ordinary .tile markup; only the layout differs. */
+.dock {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  padding: 8px 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+body[data-dock-position='bottom'] .dock {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  justify-content: center;
+  border-top: 1px solid var(--surface-border);
+}
+body[data-dock-position='top'] .dock {
+  left: 0;
+  right: 0;
+  top: 0;
+  justify-content: center;
+  border-bottom: 1px solid var(--surface-border);
+}
+body[data-dock-position='left'] .dock {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  align-items: center;
+  border-right: 1px solid var(--surface-border);
+}
+body[data-dock-position='right'] .dock {
+  top: 0;
+  bottom: 0;
+  right: 0;
+  align-items: center;
+  border-left: 1px solid var(--surface-border);
+}
+
+.dock-grid {
+  display: flex;
+  gap: 6px;
+}
+
+body[data-dock-position='bottom'] .dock-grid,
+body[data-dock-position='top'] .dock-grid {
+  flex-direction: row;
+  max-width: 100%;
+  overflow-x: auto;
+}
+body[data-dock-position='left'] .dock-grid,
+body[data-dock-position='right'] .dock-grid {
+  flex-direction: column;
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+/* Dock tiles match the main grid tiles: same width and labels, so the dock
+   reads as the same kind of icon. flex-shrink is disabled so they keep their
+   width and the strip scrolls instead of squishing them. */
+.dock .tile {
+  width: var(--tile-width);
+  flex: 0 0 auto;
+}
+
+/* ---- settings gear + dialog ---- */
+
+.gear {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--surface-border);
+  background: var(--surface);
+  color: var(--fg-dim);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+.gear:hover {
+  background: var(--chip-hover);
+  color: var(--fg);
+}
+.gear:focus-visible {
+  outline: 2px solid var(--outline);
+  outline-offset: 2px;
+}
+
+#settings-dialog {
+  min-width: 360px;
+}
+.settings-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--surface-border);
+}
+.settings-tab {
+  font: inherit;
+  color: var(--fg-dim);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.settings-tab:hover {
+  color: var(--fg);
+}
+.settings-tab[aria-selected='true'] {
+  color: var(--fg);
+  border-bottom-color: var(--outline);
+}
+.settings-tab:focus-visible {
+  outline: 2px solid var(--outline);
+  outline-offset: 2px;
+}
+.settings-panel[hidden] {
+  display: none;
+}
+
+#settings-dialog .field-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+#settings-dialog .field-inline > span {
+  font-size: 13px;
+  color: var(--fg);
+}
+#settings-dialog .field-inline select,
+#settings-dialog .field-inline input[type='range'] {
+  font: inherit;
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+#settings-dialog .field-inline input[type='range'] {
+  padding: 0;
+}
+#settings-dialog .field-inline input[type='color'] {
+  width: 40px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  background: var(--bg);
+  cursor: pointer;
+}
+#settings-dialog .field-inline[hidden] {
+  display: none;
+}
+#settings-dialog .icon-size-value {
+  min-width: 3ch;
+  text-align: right;
+  color: var(--fg-dim);
+}
+.settings-color-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }

@@ -5,7 +5,7 @@
 // list *before* the dragged node is removed (BookmarkModel compensates for
 // same-folder forward moves), so we pass the pre-removal insertion index.
 
-export function initDnd(gridEl, { getCurrentFolderId, moveNode }) {
+export function initDnd(gridEl, { getCurrentFolderId, moveNode, isEnabled = () => true }) {
   let dragId = null;
   let lastTarget = null;
 
@@ -17,6 +17,7 @@ export function initDnd(gridEl, { getCurrentFolderId, moveNode }) {
   };
 
   gridEl.addEventListener('dragstart', (event) => {
+    if (!isEnabled()) return;
     const tile = event.target.closest('.tile[data-id]');
     if (!tile) return;
     dragId = tile.dataset.id;

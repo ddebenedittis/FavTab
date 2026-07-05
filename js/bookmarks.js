@@ -19,6 +19,22 @@ export async function getNode(id) {
   return node;
 }
 
+// Every folder in the tree (nodes without a url), flattened with a depth so the
+// settings picker can indent them. The unnamed roots are skipped.
+export async function getAllFolders() {
+  const [root] = await api.getTree();
+  const out = [];
+  const walk = (node, depth) => {
+    for (const child of node.children ?? []) {
+      if (child.url) continue;
+      out.push({ id: child.id, title: child.title || 'Untitled', depth });
+      walk(child, depth + 1);
+    }
+  };
+  walk(root, 0);
+  return out;
+}
+
 export function getChildren(folderId) {
   return api.getChildren(folderId);
 }
