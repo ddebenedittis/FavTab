@@ -13,9 +13,21 @@ const emptyEl = document.getElementById('empty');
 const state = {
   path: [], // [{id, title}], path[0] is the Bookmarks Bar
   children: [], // last rendered children of the current folder
+  renderKey: null, // signature of the last render; skips redundant re-renders
 };
 
 const currentFolder = () => state.path[state.path.length - 1];
+
+// A stable fingerprint of everything the current view draws. Chrome fires
+// bookmark events during background sync even when nothing actually changed;
+// re-rendering on those recreates every <img> and makes the icons flash. If the
+// fingerprint is unchanged we skip the render entirely.
+function renderKey(path, children) {
+  return JSON.stringify([
+    path.map((p) => [p.id, p.title ?? '']),
+    children.map((n) => [n.id, n.title ?? '', n.url ?? '']),
+  ]);
+}
 
 async function refresh() {
   // If the current folder was deleted externally, back out to the nearest
@@ -36,6 +48,10 @@ async function refresh() {
     children = [];
   }
   state.children = children;
+
+  const key = renderKey(state.path, children);
+  if (key === state.renderKey) return; // nothing visible changed — don't reflash
+  state.renderKey = key;
 
   renderBreadcrumb(crumbEl, state.path, (i) => {
     state.path = state.path.slice(0, i + 1);

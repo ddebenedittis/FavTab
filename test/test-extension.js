@@ -64,6 +64,26 @@ function assert(cond, msg) {
   );
   assert(await page.locator('#empty').isHidden(), 'empty message hides when tiles exist');
 
+  // 2b. A burst of bookmark events that nets to the current state (what Chrome
+  // Sync emits during background reconciliation) must NOT re-render. A full
+  // re-render recreates every <img>, blanking and reloading the icons — the
+  // "periodic flash". Mark the live tiles, create+remove a bookmark within the
+  // debounce window (net change = none), and assert the same DOM nodes survive.
+  await page.evaluate(() => {
+    for (const t of document.querySelectorAll('#grid .tile')) t.dataset.probe = '1';
+  });
+  await page.evaluate(async (getBarSrc) => {
+    const bar = await eval(getBarSrc);
+    const tmp = await chrome.bookmarks.create({ parentId: bar.id, title: 'tmp', url: 'https://tmp.example/' });
+    await chrome.bookmarks.remove(tmp.id);
+  }, getBar);
+  await page.waitForTimeout(300);
+  assert(
+    (await page.locator('#grid .tile').count()) ===
+      (await page.locator('#grid .tile[data-probe="1"]').count()),
+    'net-zero event burst does not re-render (icons do not flash)'
+  );
+
   // 3. folder navigation + breadcrumb
   await page.locator('.tile.tile-is-folder').click();
   await page.waitForTimeout(300);
