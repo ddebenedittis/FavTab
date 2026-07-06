@@ -1,12 +1,14 @@
 // Add/edit dialog, delete confirmation, custom context menu and toast.
 
 import * as bm from './bookmarks.js';
+import { getIconOverride, setIconOverride, clearIconOverride } from './icon-store.js';
 
 const dialog = document.getElementById('edit-dialog');
 const form = document.getElementById('edit-form');
 const heading = document.getElementById('dialog-title');
 const urlRow = document.getElementById('url-row');
 const urlError = document.getElementById('url-error');
+const iconRow = document.getElementById('icon-row');
 const confirmEl = document.getElementById('confirm-dialog');
 const confirmMsg = document.getElementById('confirm-message');
 const menuEl = document.getElementById('context-menu');
@@ -21,13 +23,15 @@ const HEADINGS = {
 
 let submitAction = null;
 
-export function openBookmarkDialog({ mode, node, parentId }) {
+export function openBookmarkDialog({ mode, node, parentId, focusIcon = false }) {
   const folderMode = mode === 'add-folder' || mode === 'rename-folder';
   heading.textContent = HEADINGS[mode];
   urlRow.hidden = folderMode;
+  iconRow.hidden = folderMode;
   urlError.hidden = true;
   form.elements.title.value = node?.title ?? '';
   form.elements.url.value = node?.url ?? '';
+  form.elements.iconUrl.value = node ? (getIconOverride(node.id) ?? '') : '';
 
   submitAction = async () => {
     const title = form.elements.title.value.trim();
@@ -43,13 +47,22 @@ export function openBookmarkDialog({ mode, node, parentId }) {
       return false;
     }
     const finalTitle = title || new URL(url).hostname;
-    if (mode === 'add') await bm.createBookmark(parentId, finalTitle, url);
-    else await bm.update(node.id, { title: finalTitle, url });
+    let id;
+    if (mode === 'add') {
+      id = (await bm.createBookmark(parentId, finalTitle, url)).id;
+    } else {
+      await bm.update(node.id, { title: finalTitle, url });
+      id = node.id;
+    }
+    const iconUrl = form.elements.iconUrl.value.trim();
+    if (iconUrl) setIconOverride(id, iconUrl);
+    else clearIconOverride(id);
     return true;
   };
 
   dialog.showModal();
-  form.elements.title.select();
+  if (focusIcon && !folderMode) form.elements.iconUrl.focus();
+  else form.elements.title.select();
 }
 
 form.addEventListener('submit', async (event) => {

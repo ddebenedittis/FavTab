@@ -32,7 +32,8 @@ function assert(cond, msg) {
   page.on('pageerror', (e) => errors.push('pageerror: ' + e));
   page.on('console', (m) => {
     const url = m.location()?.url ?? '';
-    if (m.type() === 'error' && !/favicon|gstatic/.test(url) && !/favicon|gstatic/.test(m.text()))
+    const isIconNoise = /favicon|gstatic|google\.com\/s2/;
+    if (m.type() === 'error' && !isIconNoise.test(url) && !isIconNoise.test(m.text()))
       errors.push('console: ' + m.text() + ' @ ' + url);
   });
 
@@ -230,6 +231,96 @@ function assert(cond, msg) {
   assert(
     (await page.evaluate(() => document.body.dataset.dockPosition)) === 'left',
     'dock position persists after reload'
+  );
+
+  // 8d. per-bookmark custom icon overrides (chrome.storage.sync 'iconOverrides')
+  // The reload above left us at the root folder, where the Wikipedia bookmark lives.
+  const wikiSel = 'a.tile[href="https://wikipedia.org/"]';
+  // Auto chain: a normal web bookmark is tried through its own /favicon.ico first.
+  assert(
+    (await page.locator(`${wikiSel} img.tile-icon`).getAttribute('src'))?.includes('wikipedia.org/favicon.ico'),
+    "web bookmark icon resolves via the site's /favicon.ico first"
+  );
+
+  const wikiId = await page.locator(wikiSel).getAttribute('data-id');
+  // A 1x1 PNG data URI — loads successfully (no network), so an override sticks.
+  const DATA_ICON =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+  // Override wins: seeding storage re-renders (via icon-store onChange) and the
+  // tile switches to the custom icon ahead of every auto source.
+  await page.evaluate(async ([id, icon]) => {
+    const cur = (await chrome.storage.sync.get('iconOverrides')).iconOverrides ?? {};
+    await chrome.storage.sync.set({ iconOverrides: { ...cur, [id]: icon } });
+  }, [wikiId, DATA_ICON]);
+  await page.waitForTimeout(400);
+  assert(
+    (await page.locator(`${wikiSel} img.tile-icon`).getAttribute('src')) === DATA_ICON,
+    'custom icon override wins over auto sources'
+  );
+
+  // Fallback chain: when the current source (the override) errors, the image
+  // advances to the next — the site's /favicon.ico.
+  await page.locator(`${wikiSel} img.tile-icon`).evaluate((el) => el.dispatchEvent(new Event('error')));
+  await page.waitForTimeout(200);
+  assert(
+    (await page.locator(`${wikiSel} img.tile-icon`).getAttribute('src'))?.includes('wikipedia.org/favicon.ico'),
+    "icon advances to the next source (the site's /favicon.ico) when a source errors"
+  );
+
+  // Terminal fallback: when every auto source errors (no favicon anywhere), the
+  // tile ends on the colored letter tile — not a stuck generic placeholder.
+  for (let n = 0; n < 5; n++) {
+    if ((await page.locator(`${wikiSel} img.tile-icon`).count()) === 0) break;
+    await page.locator(`${wikiSel} img.tile-icon`).evaluate((el) => el.dispatchEvent(new Event('error')));
+    await page.waitForTimeout(80);
+  }
+  assert(
+    (await page.locator(`${wikiSel} .tile-letter`).count()) === 1 &&
+      (await page.locator(`${wikiSel} img.tile-icon`).count()) === 0,
+    'icon falls back to the colored letter tile when all sources fail'
+  );
+
+  // Clean slate before the dialog test so the save triggers a fresh re-render.
+  await page.evaluate(async (id) => {
+    const cur = (await chrome.storage.sync.get('iconOverrides')).iconOverrides ?? {};
+    delete cur[id];
+    await chrome.storage.sync.set({ iconOverrides: cur });
+  }, wikiId);
+  await page.waitForTimeout(300);
+
+  // Edit dialog persists an override to chrome.storage.sync and renders it.
+  await page.locator(wikiSel).click({ button: 'right' });
+  await page.waitForTimeout(100);
+  await page.locator('#context-menu button').filter({ hasText: 'Change icon' }).click();
+  await page.fill('#edit-form input[name="iconUrl"]', DATA_ICON);
+  await page.click('#dialog-ok');
+  await page.waitForTimeout(400);
+  assert(
+    (await page.evaluate(
+      async (id) => ((await chrome.storage.sync.get('iconOverrides')).iconOverrides ?? {})[id],
+      wikiId
+    )) === DATA_ICON,
+    'edit dialog persists the custom icon to chrome.storage.sync'
+  );
+  assert(
+    (await page.locator(`${wikiSel} img.tile-icon`).getAttribute('src')) === DATA_ICON,
+    'saved custom icon renders on the tile'
+  );
+
+  // Clearing the field removes the override entirely.
+  await page.locator(wikiSel).click({ button: 'right' });
+  await page.waitForTimeout(100);
+  await page.locator('#context-menu button').filter({ hasText: 'Change icon' }).click();
+  await page.fill('#edit-form input[name="iconUrl"]', '');
+  await page.click('#dialog-ok');
+  await page.waitForTimeout(400);
+  assert(
+    (await page.evaluate(
+      async (id) => ((await chrome.storage.sync.get('iconOverrides')).iconOverrides ?? {})[id] ?? null,
+      wikiId
+    )) === null,
+    'clearing the icon field removes the override'
   );
 
   // 9. screenshots, light + dark (only if an /out volume is mounted)

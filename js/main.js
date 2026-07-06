@@ -4,6 +4,7 @@
 
 import * as bm from './bookmarks.js';
 import * as settings from './settings.js';
+import * as iconStore from './icon-store.js';
 import { renderBreadcrumb, renderGrid } from './grid.js';
 import { initDnd } from './dnd.js';
 import { openBookmarkDialog, confirmDialog, openContextMenu, showToast } from './dialogs.js';
@@ -179,11 +180,16 @@ document.addEventListener('contextmenu', (event) => {
   const node = tile && children.find((n) => n.id === tile.dataset.id);
 
   if (node && node.url) {
-    openContextMenu(event.clientX, event.clientY, [
+    const items = [
       { label: 'Open in new tab', action: () => chrome.tabs.create({ url: node.url }) },
       { label: 'Edit…', action: () => openBookmarkDialog({ mode: 'edit', node }) },
-      { label: 'Delete', danger: true, action: () => deleteNode(node) },
-    ]);
+      { label: 'Change icon…', action: () => openBookmarkDialog({ mode: 'edit', node, focusIcon: true }) },
+    ];
+    if (iconStore.getIconOverride(node.id)) {
+      items.push({ label: 'Reset icon', action: () => iconStore.clearIconOverride(node.id) });
+    }
+    items.push({ label: 'Delete', danger: true, action: () => deleteNode(node) });
+    openContextMenu(event.clientX, event.clientY, items);
   } else if (node) {
     openContextMenu(event.clientX, event.clientY, [
       { label: 'Open', action: () => handlers.onOpenFolder(node) },
@@ -232,14 +238,35 @@ document.getElementById('open-settings').addEventListener('click', () => {
   openSettingsDialog();
 });
 
+// A custom-icon change doesn't touch bookmark data, so the renderKey guard would
+// skip the redraw — clear it to force both views to rebuild their icons.
+function onIconOverridesChange() {
+  state.renderKey = null;
+  dockState.renderKey = null;
+  refreshAll();
+}
+
+// Drop overrides for bookmarks (and whole folders) deleted anywhere.
+chrome.bookmarks.onRemoved.addListener((id, removeInfo) => {
+  const prune = (node) => {
+    if (!node) return;
+    iconStore.clearIconOverride(node.id);
+    for (const child of node.children ?? []) prune(child);
+  };
+  iconStore.clearIconOverride(id);
+  prune(removeInfo?.node);
+});
+
 (async function init() {
   try {
     await settings.load();
+    await iconStore.load();
     settings.applyCssVars();
     const bar = await bm.getBarFolder();
     state.path = [{ id: bar.id, title: bar.title || 'Bookmarks' }];
     bm.onAnyChange(refreshAll);
     settings.onChange(onSettingsChange);
+    iconStore.onChange(onIconOverridesChange);
     await refreshAll();
   } catch (err) {
     showToast(err?.message || String(err));

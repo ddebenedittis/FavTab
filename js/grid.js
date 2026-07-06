@@ -2,6 +2,7 @@
 // change — bookmark folders are small enough that diffing would be overkill.
 
 import { iconElement, folderGlyph, plusGlyph, isWebUrl } from './icons.js';
+import { getIconOverride } from './icon-store.js';
 
 export function renderBreadcrumb(container, path, onNavigate) {
   container.textContent = '';
@@ -62,14 +63,14 @@ function makeTile(node, index, handlers, draggable = true) {
     tile = document.createElement('a');
     tile.className = 'tile';
     tile.href = node.url;
-    tile.append(chip(iconElement(node)), label(node.title || node.url));
+    tile.append(chip(iconElement(node, getIconOverride(node.id))), label(node.title || node.url));
   } else {
     // chrome://, about:, file:, javascript:, … — anchors can't navigate to
     // these from an extension page, so route clicks through the handler.
     tile = document.createElement('button');
     tile.type = 'button';
     tile.className = 'tile';
-    tile.append(chip(iconElement(node)), label(node.title || node.url));
+    tile.append(chip(iconElement(node, getIconOverride(node.id))), label(node.title || node.url));
     tile.addEventListener('click', () => handlers.onOpenSpecial(node, false));
     tile.addEventListener('auxclick', (event) => {
       if (event.button === 1) {
