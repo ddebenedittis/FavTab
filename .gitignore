@@ -16,3 +16,6 @@ npm-debug.log*
 # Playwright test artifacts
 test/test-results/
 test/playwright-report/
+
+# Packaged builds
+dist/
